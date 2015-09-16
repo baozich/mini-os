@@ -1,0 +1,13 @@
+*.o
+*.a
+include/mini-os
+include/arm/mini-os
+include/x86/mini-os
+include/list.h
+mini-os
+mini-os.gz
+mini-os.img
+dtc/
+include/fdt.h
+include/libfdt.h
+cscope.*
