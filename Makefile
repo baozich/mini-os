@@ -54,7 +54,14 @@ DEF_CFLAGS += $(flags-y)
 # Symlinks and headers that must be created before building the C files
 GENERATED_HEADERS := include/list.h $(ARCH_LINKS) include/mini-os include/$(TARGET_ARCH_FAM)/mini-os
 
+ifeq ($(MINIOS_TARGET_ARCH),arm32)
+GENERATED_HEADERS += include/fdt.h include/libfdt.h
+endif
+
 EXTRA_DEPS += $(GENERATED_HEADERS)
+
+include/%.h: dtc/libfdt/%.h
+	ln -s ../$^ $@
 
 # Include common mini-os makerules.
 include minios.mk
@@ -76,7 +83,18 @@ EXTRA_OBJS =
 TARGET := mini-os
 
 # Subdirectories common to mini-os
-SUBDIRS := lib xenbus console
+SUBDIRS := lib xenbus console dtc/libfdt
+
+FDT_SRC :=
+ifeq ($(MINIOS_TARGET_ARCH),arm32)
+# Need libgcc.a for division helpers
+LDLIBS += `$(CC) -print-libgcc-file-name`
+
+# Device tree support
+FDT_SRC := dtc/libfdt/fdt.c dtc/libfdt/fdt_ro.c dtc/libfdt/fdt_strerror.c
+
+src-y += ${FDT_SRC}
+endif
 
 src-$(CONFIG_BLKFRONT) += blkfront.c
 src-$(CONFIG_TPMFRONT) += tpmfront.c
@@ -98,10 +116,13 @@ src-y += sched.c
 src-$(CONFIG_TEST) += test.c
 
 src-y += lib/ctype.c
+ifneq ($(MINIOS_TARGET_ARCH),arm32)
 src-y += lib/math.c
+endif
 src-y += lib/printf.c
 src-y += lib/stack_chk_fail.c
 src-y += lib/string.c
+src-y += lib/memmove.c
 src-y += lib/sys.c
 src-y += lib/xmalloc.c
 src-$(CONFIG_XENBUS) += lib/xs.c
@@ -188,7 +209,11 @@ $(OBJ_DIR)/$(TARGET): $(OBJS) $(APP_O) arch_lib
 	$(LD) -r $(LDFLAGS) $(HEAD_OBJ) $(APP_O) $(OBJS) $(LDARCHLIB) $(LDLIBS) -o $@.o
 	$(OBJCOPY) -w -G $(GLOBAL_PREFIX)* -G _start $@.o $@.o
 	$(LD) $(LDFLAGS) $(LDFLAGS_FINAL) $@.o $(EXTRA_OBJS) -o $@
+ifeq ($(MINIOS_TARGET_ARCH),arm32)
+	$(OBJCOPY) -O binary $@ $@.img
+else
 	gzip -f -9 -c $@ >$@.gz
+endif
 
 .PHONY: clean arch_clean
 

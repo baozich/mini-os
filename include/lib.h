@@ -95,6 +95,7 @@ char	*strncpy(char * __restrict, const char * __restrict, size_t);
 
 char	*strstr(const char *, const char *);
 
+void *memmove(void *, const void *, size_t);
 void *memset(void *, int, size_t);
 
 char *strchr(const char *p, int ch);
@@ -104,7 +105,8 @@ char *strrchr(const char *p, int ch);
  *	@(#)systm.h	8.7 (Berkeley) 3/29/95
  * $FreeBSD$
  */
-void	*memcpy(void *to, const void *from, size_t len);
+void *memcpy(void *to, const void *from, size_t len);
+void *memchr(const void *s, int c, size_t n);
 
 size_t strnlen(const char *, size_t);
 #endif
