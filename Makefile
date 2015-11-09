@@ -54,7 +54,7 @@ DEF_CFLAGS += $(flags-y)
 # Symlinks and headers that must be created before building the C files
 GENERATED_HEADERS := include/list.h $(ARCH_LINKS) include/mini-os include/$(TARGET_ARCH_FAM)/mini-os
 
-ifeq ($(MINIOS_TARGET_ARCH),arm32)
+ifeq ($(TARGET_ARCH_FAM),arm)
 GENERATED_HEADERS += include/fdt.h include/libfdt.h
 endif
 
@@ -89,7 +89,9 @@ FDT_SRC :=
 ifeq ($(MINIOS_TARGET_ARCH),arm32)
 # Need libgcc.a for division helpers
 LDLIBS += `$(CC) -print-libgcc-file-name`
+endif
 
+ifeq ($(TARGET_ARCH_FAM),arm)
 # Device tree support
 FDT_SRC := dtc/libfdt/fdt.c dtc/libfdt/fdt_ro.c dtc/libfdt/fdt_strerror.c
 
@@ -209,7 +211,7 @@ $(OBJ_DIR)/$(TARGET): $(OBJS) $(APP_O) arch_lib
 	$(LD) -r $(LDFLAGS) $(HEAD_OBJ) $(APP_O) $(OBJS) $(LDARCHLIB) $(LDLIBS) -o $@.o
 	$(OBJCOPY) -w -G $(GLOBAL_PREFIX)* -G _start $@.o $@.o
 	$(LD) $(LDFLAGS) $(LDFLAGS_FINAL) $@.o $(EXTRA_OBJS) -o $@
-ifeq ($(MINIOS_TARGET_ARCH),arm32)
+ifeq ($(TARGET_ARCH_FAM),arm)
 	$(OBJCOPY) -O binary $@ $@.img
 else
 	gzip -f -9 -c $@ >$@.gz
@@ -226,6 +228,9 @@ clean:	arch_clean
 	done
 	rm -f include/list.h
 	rm -f $(OBJ_DIR)/*.o *~ $(OBJ_DIR)/core $(OBJ_DIR)/$(TARGET).elf $(OBJ_DIR)/$(TARGET).raw $(OBJ_DIR)/$(TARGET) $(OBJ_DIR)/$(TARGET).gz
+ifeq ($(TARGET_ARCH_FAM),arm)
+	rm -f $(OBJ_DIR)/$(TARGET).img
+endif
 	find . $(OBJ_DIR) -type l | xargs rm -f
 	$(RM) $(OBJ_DIR)/lwip.a $(LWO)
 	rm -f tags TAGS

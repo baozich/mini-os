@@ -25,8 +25,8 @@ struct thread* arch_create_thread(char *name, void (*function)(void *),
 
     /* Push the details to pass to arm_start_thread onto the stack. */
     int *sp = (int *) (thread->stack + STACK_SIZE);
-    *(--sp) = (int) function;
-    *(--sp) = (int) data;
+    *(--sp) = (unsigned long) function;
+    *(--sp) = (unsigned long) data;
 
     /* We leave room for the 8 callee-saved registers which we will
      * try to restore on thread switch, even though they're not needed
@@ -40,8 +40,10 @@ struct thread* arch_create_thread(char *name, void (*function)(void *),
 
 void run_idle_thread(void)
 {
+#if defined(__arm__)
     __asm__ __volatile__ ("mov sp, %0; bx %1"::
             "r"(idle_thread->sp + 4 * CALLEE_SAVED_REGISTERS),
             "r"(idle_thread->ip));
     /* Never arrive here! */
+#endif
 }

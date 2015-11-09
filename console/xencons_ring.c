@@ -27,7 +27,11 @@ static inline void notify_daemon(struct consfront_dev *dev)
 static inline struct xencons_interface *xencons_interface(void)
 {
     if (start_info.console.domU.evtchn)
+#ifndef __aarch64__
         return mfn_to_virt(start_info.console.domU.mfn);
+#else
+        return (struct xencons_interface *)start_info.console.domU.mfn;
+#endif
     else
         return NULL;
 } 
@@ -172,7 +176,11 @@ struct consfront_dev *xencons_ring_init(void)
 	dev->fd = -1;
 #endif
 	dev->evtchn = start_info.console.domU.evtchn;
+#if !defined(__aarch64__)
 	dev->ring = (struct xencons_interface *) mfn_to_virt(start_info.console.domU.mfn);
+#else
+	dev->ring = (struct xencons_interface *) start_info.console.domU.mfn;
+#endif
 
 	err = bind_evtchn(dev->evtchn, console_handle_input, dev);
 	if (err <= 0) {

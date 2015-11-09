@@ -120,13 +120,22 @@ void start_kernel(void)
     /* Set up events. */
     init_events();
 
+#if !(defined(__arm__) || defined(__aarch64__))
     /* ENABLE EVENT DELIVERY. This is disabled at start of day. */
     local_irq_enable();
+#endif
 
     setup_xen_features();
 
     /* Init memory management. */
     init_mm();
+
+#if (defined(__arm__) || defined(__aarch64__))
+    /* Init interrupt controller */
+    gic_init();
+    /* ENABLE EVENT DELIVERY. This is disabled at start of day. */
+    local_irq_enable();
+#endif
 
     /* Init time and timers. */
     init_time();

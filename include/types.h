@@ -5,10 +5,10 @@
  *
  *        File: types.h
  *      Author: Rolf Neugebauer (neugebar@dcs.gla.ac.uk)
- *     Changes: 
- *              
+ *     Changes:
+ *
  *        Date: May 2003
- * 
+ *
  * Environment: Xen Minimal OS
  * Description: a random collection of type definitions
  *
@@ -30,7 +30,7 @@ typedef unsigned long       u_long;
 #if defined(__i386__) || defined(__arm__)
 typedef long long           quad_t;
 typedef unsigned long long  u_quad_t;
-#elif defined(__x86_64__)
+#elif defined(__x86_64__) || defined(__aarch64__)
 typedef long                quad_t;
 typedef unsigned long       u_quad_t;
 #endif /* __i386__ || __x86_64__ */
@@ -66,6 +66,11 @@ typedef  int64_t off_t;
 
 typedef intptr_t            ptrdiff_t;
 
+#if defined(__i386__) || defined(__arm__)
+typedef uint32_t register_t;
+#elif defined(__x86_64__) || defined(__aarch64__)
+typedef uint64_t register_t;
+#endif
 
 #ifndef HAVE_LIBC
 typedef long ssize_t;

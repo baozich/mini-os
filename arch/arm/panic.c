@@ -39,7 +39,7 @@ extern handler fault_svc;
 extern handler fault_prefetch_call;
 extern handler fault_prefetch_abort;
 extern handler fault_data_abort;
-
+#if 0
 void dump_registers(int *saved_registers) {
     static int in_dump = 0;
     int *sp, *stack_top, *x;
@@ -96,3 +96,4 @@ void dump_registers(int *saved_registers) {
 
     in_dump = 0;
 }
+#endif

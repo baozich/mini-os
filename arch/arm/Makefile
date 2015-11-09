@@ -21,7 +21,11 @@ ARCH_SRCS := $(wildcard *.c)
 # The objects built from the sources.
 ARCH_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(ARCH_SRCS))
 
+ifeq ($(MINIOS_TARGET_ARCH),arm32)
 ARCH_OBJS += $(OBJ_DIR)/hypercalls32.o
+else
+ARCH_OBJS += $(OBJ_DIR)/hypercalls64.o
+endif
 
 all: $(OBJ_DIR)/$(ARCH_LIB)
 

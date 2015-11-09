@@ -14,6 +14,7 @@
 #endif
 
 extern void (*IRQ_handler)(void);
+extern lpae_t fixmap_pgtable[512];
 
 struct gic {
     volatile char *gicd_base;
@@ -41,17 +42,32 @@ static struct gic gic;
 
 #define REG(addr) ((uint32_t *)(addr))
 
+static inline void set_pgt_entry(lpae_t *ptr, lpae_t val)
+{
+    *ptr = val;
+    dsb(ishst);
+    isb();
+}
+
 static inline uint32_t REG_READ32(volatile uint32_t *addr)
 {
     uint32_t value;
+#if defined(__arm__)
     __asm__ __volatile__("ldr %0, [%1]":"=&r"(value):"r"(addr));
+#else
+    __asm__ __volatile__("ldr %w0, [%1]":"=&r"(value):"r"(addr));
+#endif
     rmb();
     return value;
 }
 
 static inline void REG_WRITE32(volatile uint32_t *addr, unsigned int value)
 {
+#if defined(__arm__)
     __asm__ __volatile__("str %0, [%1]"::"r"(value), "r"(addr));
+#else
+    __asm__ __volatile__("str %w0, [%1]"::"r" (value), "r"(addr));
+#endif
     wmb();
 }
 
@@ -177,10 +193,24 @@ static void gic_handler(void) {
     gic_eoir(&gic, irq);
 }
 
+static void map_gic(const uint64_t *reg)
+{
+    paddr_t gicd, gicc;
+
+    gicd = (paddr_t) fdt64_to_cpu(reg[0]);
+    gicc = (paddr_t) fdt64_to_cpu(reg[2]);
+
+    set_pgt_entry(&fixmap_pgtable[l2_pgt_idx(FIX_GIC_START)],
+                  ((gicd & L2_MASK) | BLOCK_DEV_ATTR | L2_BLOCK));
+    gic.gicd_base = (void *)(FIX_GIC_START + (gicd & L2_OFFSET));
+    gic.gicc_base = (void *)(FIX_GIC_START + (gicc & L2_OFFSET));
+}
+
 void gic_init(void) {
     gic.gicd_base = NULL;
     int node = 0;
     int depth = 0;
+
     for (;;)
     {
         node = fdt_next_node(device_tree, node, &depth);
@@ -207,12 +237,17 @@ void gic_init(void) {
                 continue;
             }
 
+#if defined(__arm__)
             gic.gicd_base = to_virt((long) fdt64_to_cpu(reg[0]));
             gic.gicc_base = to_virt((long) fdt64_to_cpu(reg[2]));
+#else
+            map_gic(reg);
+#endif
             printk("Found GIC: gicd_base = %p, gicc_base = %p\n", gic.gicd_base, gic.gicc_base);
             break;
         }
     }
+
     if (!gic.gicd_base) {
         printk("GIC not found!\n");
         BUG();
@@ -235,4 +270,7 @@ void gic_init(void) {
 
     gic_enable_interrupt(&gic, EVENTS_IRQ /* interrupt number */, 0x1 /*cpu_set*/, 1 /*level_sensitive*/);
     gic_enable_interrupt(&gic, VIRTUALTIMER_IRQ /* interrupt number */, 0x1 /*cpu_set*/, 1 /*level_sensitive*/);
+}
+
+void init_IRQ(void) {
 }

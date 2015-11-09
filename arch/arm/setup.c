@@ -22,8 +22,17 @@ union start_info_union start_info_union;
 shared_info_t *HYPERVISOR_shared_info;
 
 extern char shared_info_page[PAGE_SIZE];
+extern lpae_t boot_l1_pgtable[512];
+extern lpae_t fixmap_pgtable[512];
 
 void *device_tree;
+
+static inline void set_pgt_entry(lpae_t *ptr, lpae_t val)
+{
+    *ptr = val;
+    dsb(ishst);
+    isb();
+}
 
 static int hvm_get_parameter(int idx, uint64_t *value)
 {
@@ -40,6 +49,19 @@ static int hvm_get_parameter(int idx, uint64_t *value)
     return ret;
 }
 
+static xen_pfn_t map_console(xen_pfn_t mfn)
+{
+    paddr_t phys;
+
+    phys = PFN_PHYS(mfn);
+    xprintk("map_console, phys = 0x%lx\n", phys);
+
+    set_pgt_entry(&fixmap_pgtable[l2_pgt_idx(FIX_CON_START)],
+                  ((phys & L2_MASK) | BLOCK_DEV_ATTR | L2_BLOCK));
+
+    return (xen_pfn_t) (FIX_CON_START + (phys & L2_OFFSET));
+}
+
 static void get_console(void)
 {
     uint64_t v = -1;
@@ -48,10 +70,14 @@ static void get_console(void)
     start_info.console.domU.evtchn = v;
 
     hvm_get_parameter(HVM_PARAM_CONSOLE_PFN, &v);
+#if defined(__aarch64__)
+    start_info.console.domU.mfn = map_console(v);
+#else
     start_info.console.domU.mfn = v;
+#endif
 
     printk("Console is on port %d\n", start_info.console.domU.evtchn);
-    printk("Console ring is at mfn %lx\n", (unsigned long) start_info.console.domU.mfn);
+    printk("Console ring is at mfn %lx\n", (unsigned long)start_info.console.domU.mfn);
 }
 
 void get_xenbus(void)
@@ -69,9 +95,27 @@ void get_xenbus(void)
 }
 
 /*
+ * Map device_tree (paddr) to FIX_FDT_START (vaddr)
+ */
+static void *map_fdt(paddr_t device_tree)
+{
+    /*
+     * FIXME: To deal with the 2M alignment, only 4KB space is usable
+     * because device_tree is aligned to a (2M - 4KB) address.
+     */
+    set_pgt_entry(&boot_l1_pgtable[l1_pgt_idx(FIX_FDT_START)],
+                  (to_phys(fixmap_pgtable) | L1_TABLE));
+    set_pgt_entry(&fixmap_pgtable[l2_pgt_idx(FIX_FDT_START)],
+                  ((device_tree & L2_MASK) | BLOCK_DEF_ATTR | L2_BLOCK));
+
+    return (void *)(FIX_FDT_START + (device_tree & L2_OFFSET));
+}
+
+
+/*
  * INITIAL C ENTRY POINT.
  */
-void arch_init(void *dtb_pointer, uint32_t physical_offset)
+void arch_init(void *dtb_pointer, paddr_t physical_offset)
 {
     struct xen_add_to_physmap xatp;
     int r;
@@ -80,12 +124,12 @@ void arch_init(void *dtb_pointer, uint32_t physical_offset)
 
     physical_address_offset = physical_offset;
 
-    xprintk("Virtual -> physical offset = %x\n", physical_address_offset);
+    dtb_pointer = map_fdt((paddr_t) dtb_pointer);
 
-    xprintk("Checking DTB at %p...\n", dtb_pointer);
+    printk("Checking DTB at %p...\n", dtb_pointer);
 
     if ((r = fdt_check_header(dtb_pointer))) {
-        xprintk("Invalid DTB from Xen: %s\n", fdt_strerror(r));
+        printk("Invalid DTB from Xen: %s\n", fdt_strerror(r));
         BUG();
     }
     device_tree = dtb_pointer;
@@ -102,8 +146,6 @@ void arch_init(void *dtb_pointer, uint32_t physical_offset)
     /* Fill in start_info */
     get_console();
     get_xenbus();
-
-    gic_init();
 
     start_kernel();
 }

@@ -7,6 +7,7 @@
 #include <mini-os/types.h>
 #include <mini-os/compiler.h>
 #include <mini-os/kernel.h>
+#include <mini-os/gic.h>
 #include <xen/xen.h>
 
 void arch_fini(void);
@@ -22,6 +23,7 @@ extern void *device_tree;
 
 extern shared_info_t *HYPERVISOR_shared_info;
 
+#if defined(__arm__)
 // disable interrupts
 static inline void local_irq_disable(void) {
     __asm__ __volatile__("cpsid i":::"memory");
@@ -44,20 +46,66 @@ static inline void local_irq_enable(void) {
     __asm__ __volatile__("mrs %0, cpsr":"=r"(x)::"memory");    \
 }
 
+/* We probably only need "dmb" here, but we'll start by being paranoid. */
+#define mb() __asm__("dsb":::"memory");
+#define rmb() __asm__("dsb":::"memory");
+#define wmb() __asm__("dsb":::"memory");
+#elif defined(__aarch64__)
+static inline void local_irq_disable(void)
+{
+    __asm__ __volatile__("msr daifset, #2": : :"memory");
+}
+
+static inline void local_irq_enable(void)
+{
+    __asm__ __volatile__("msr daifclr, #2": : :"memory");
+}
+
+#define local_irq_save(x) { \
+    __asm__ __volatile__("mrs %0, daif; msr daifset, #2":"=r"(x)::"memory"); \
+}
+
+#define local_irq_restore(x) { \
+    __asm__ __volatile__("msr daif, %0": :"r"(x):"memory"); \
+}
+
+#define local_save_flags(x) { \
+    __asm__ __volatile__("mrs %0, daif":"=r"(x): :"memory"); \
+}
+
+#define	isb()		__asm __volatile("isb" : : : "memory")
+
+/*
+ * Options for DMB and DSB:
+ *	oshld	Outer Shareable, load
+ *	oshst	Outer Shareable, store
+ *	osh	Outer Shareable, all
+ *	nshld	Non-shareable, load
+ *	nshst	Non-shareable, store
+ *	nsh	Non-shareable, all
+ *	ishld	Inner Shareable, load
+ *	ishst	Inner Shareable, store
+ *	ish	Inner Shareable, all
+ *	ld	Full system, load
+ *	st	Full system, store
+ *	sy	Full system, all
+ */
+#define dmb(opt)        asm volatile("dmb " #opt : : : "memory")
+#define dsb(opt)        asm volatile("dsb " #opt : : : "memory")
+
+#define	mb()	dmb(sy)	/* Full system memory barrier all */
+#define	wmb()	dmb(st)	/* Full system memory barrier store */
+#define	rmb()	dmb(ld)	/* Full system memory barrier load */
+
+#endif
+
 static inline int irqs_disabled(void) {
     int x;
     local_save_flags(x);
     return x & 0x80;
 }
 
-/* We probably only need "dmb" here, but we'll start by being paranoid. */
-#define mb() __asm__("dsb":::"memory");
-#define rmb() __asm__("dsb":::"memory");
-#define wmb() __asm__("dsb":::"memory");
-
-/************************** arm *******************************/
 #ifdef __INSIDE_MINIOS__
-#if defined (__arm__)
 #define xchg(ptr,v) __atomic_exchange_n(ptr, v, __ATOMIC_SEQ_CST)
 
 /**
@@ -121,6 +169,7 @@ static __inline__ void clear_bit(int nr, volatile unsigned long *addr)
     test_and_clear_bit(nr, addr);
 }
 
+#if defined (__arm__)
 /**
  * __ffs - find first (lowest) set bit in word.
  * @word: The word to search
@@ -151,12 +200,17 @@ static __inline__ unsigned long __ffs(unsigned long word)
     return 31 - clz;
 }
 
-#else /* ifdef __arm__ */
+#elif defined(__aarch64__)
+
+static inline unsigned long __ffs(unsigned long word)
+{
+	return __builtin_ctzl(word);
+}
+
+#else
 #error "Unsupported architecture"
 #endif
 #endif /* ifdef __INSIDE_MINIOS */
-
-/********************* common arm32 and arm64  ****************************/
 
 /* If *ptr == old, then store new there (and return new).
  * Otherwise, return the old value.
